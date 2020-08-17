@@ -68,8 +68,9 @@ int get_max_len(char *body, XftFont *font, int max_text_width)
 		return ++eol;
 }
 
-void expire()
+void expire(int sig, siginfo_t *info, void *ucontext)
 {
+	((void)sig);((void)info);((void)ucontext); // remove "unused variable" warnings
 	XEvent event;
 	event.type = ButtonPress;
 	event.xbutton.button = DISMISS_BUTTON;
@@ -91,11 +92,20 @@ int main(int argc, char *argv[])
 		die("Usage: %s body", argv[0]);
 	}
 
-	signal(SIGALRM, expire);
-	signal(SIGTERM, expire);
-	signal(SIGINT, expire);
-	signal(SIGUSR1, SIG_IGN);
-	signal(SIGUSR2, SIG_IGN);
+	struct sigaction sa_expire;
+	sa_expire.sa_sigaction = &expire;
+	sa_expire.sa_flags = SA_SIGINFO;
+	sigemptyset(&sa_expire.sa_mask);
+
+	struct sigaction sa_ignore;
+	sa_ignore.sa_handler = SIG_IGN;
+	sa_ignore.sa_flags = 0;
+	sigemptyset(&sa_ignore.sa_mask);
+
+	sigaction(SIGUSR1, &sa_ignore, 0);
+	sigaction(SIGALRM, &sa_expire, 0);
+	sigaction(SIGTERM, &sa_expire, 0);
+	sigaction(SIGINT, &sa_expire, 0);
 
 	display = XOpenDisplay(0);
 
@@ -171,8 +181,7 @@ int main(int argc, char *argv[])
 	sem_t *mutex = sem_open("/herbe", O_CREAT, 0644, 1);
 	sem_wait(mutex);
 
-	signal(SIGUSR1, expire);
-	signal(SIGUSR2, action);
+	sigaction(SIGUSR1, &sa_expire, 0);
 
 	if (duration != 0)
 		alarm(duration);
